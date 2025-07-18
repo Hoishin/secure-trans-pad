@@ -263,7 +263,18 @@ class TranscriptionService:
     async def start_transcription(self) -> None:
         """Initialize and start the transcription process"""
         # Initialize Whisper model
-        self.model = WhisperModel(self.args.model, device="cpu", compute_type="int8")
+        print(f"Initializing Whisper model '{self.args.model}' on {self.args.whisper_device} with {self.args.compute_type} precision...")
+        
+        # Check if running on macOS
+        import platform
+        if platform.system() == "Darwin" and platform.machine() == "arm64":
+            print("Note: faster-whisper doesn't support M1 GPU acceleration. For GPU support, consider whisper.cpp instead.")
+        
+        self.model = WhisperModel(
+            self.args.model, 
+            device=self.args.whisper_device, 
+            compute_type=self.args.compute_type
+        )
 
         # Start audio recording
         self.p_audio = pyaudio.PyAudio()
@@ -396,6 +407,18 @@ async def main():
         type=str,
         default=None,
         help="Audio input device index or partial name to use",
+    )
+    parser.add_argument(
+        "--whisper-device",
+        choices=["cpu", "cuda", "auto"],
+        default="cpu",
+        help="Device to use for Whisper model (default: cpu). Note: M1 GPU is not supported, only CPU",
+    )
+    parser.add_argument(
+        "--compute-type",
+        choices=["int8", "int8_float16", "int16", "float16", "float32"],
+        default="int8",
+        help="Compute type for Whisper model (default: int8). For best performance on M1, use int8",
     )
 
     args = parser.parse_args()
