@@ -1,0 +1,11 @@
+[project]
+name = "secure-trans-pad"
+version = "0.1.0"
+description = "Secure local transcription and translation tool"
+dependencies = [
+    "playwright",
+    "numpy",
+    "pyaudio",
+    "faster-whisper",
+    "llm",
+]
