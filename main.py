@@ -65,6 +65,25 @@ class TranscriptionService:
 
         print("Resources cleaned up. Exiting.")
 
+    def list_audio_devices(self):
+        """List available audio input devices"""
+        p = pyaudio.PyAudio()
+        print("\nAvailable audio input devices:")
+        print("-" * 50)
+        
+        input_devices = []
+        for i in range(p.get_device_count()):
+            info = p.get_device_info_by_index(i)
+            if info['maxInputChannels'] > 0:
+                input_devices.append((i, info['name']))
+                print(f"Device {i}: {info['name']}")
+                print(f"  - Sample Rate: {info['defaultSampleRate']} Hz")
+                print(f"  - Input Channels: {info['maxInputChannels']}")
+                print()
+        
+        p.terminate()
+        return input_devices
+
     def audio_callback(self, in_data, frame_count, time_info, status):
         """Process incoming audio data"""
 
@@ -248,14 +267,48 @@ class TranscriptionService:
 
         # Start audio recording
         self.p_audio = pyaudio.PyAudio()
-        self.stream = self.p_audio.open(
-            format=self.FORMAT,
-            channels=self.CHANNELS,
-            rate=self.RATE,
-            input=True,
-            frames_per_buffer=self.CHUNK,
-            stream_callback=self.audio_callback,
-        )
+        
+        # Determine device index
+        device_index = None
+        if self.args.device:
+            # Try to parse as integer (device index)
+            try:
+                device_index = int(self.args.device)
+            except ValueError:
+                # Search for device by partial name match
+                for i in range(self.p_audio.get_device_count()):
+                    info = self.p_audio.get_device_info_by_index(i)
+                    if info['maxInputChannels'] > 0 and self.args.device.lower() in info['name'].lower():
+                        device_index = i
+                        print(f"Using audio device: {info['name']} (index {i})")
+                        break
+                
+                if device_index is None:
+                    print(f"Error: No audio device found matching '{self.args.device}'")
+                    print("Use --list-devices to see available devices")
+                    self.running = False
+                    return
+        
+        # Open audio stream
+        stream_params = {
+            "format": self.FORMAT,
+            "channels": self.CHANNELS,
+            "rate": self.RATE,
+            "input": True,
+            "frames_per_buffer": self.CHUNK,
+            "stream_callback": self.audio_callback,
+        }
+        
+        if device_index is not None:
+            stream_params["input_device_index"] = device_index
+        
+        try:
+            self.stream = self.p_audio.open(**stream_params)
+        except Exception as e:
+            print(f"Error opening audio device: {e}")
+            print("Use --list-devices to see available devices")
+            self.running = False
+            return
 
         self.stream.start_stream()
         print("Recording started. Speak into the microphone. Press Ctrl+C to exit.")
@@ -333,6 +386,17 @@ async def main():
         action="store_true",
         help="Show delay in the processing",
     )
+    parser.add_argument(
+        "--list-devices",
+        action="store_true",
+        help="List available audio input devices and exit",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Audio input device index or partial name to use",
+    )
 
     args = parser.parse_args()
 
@@ -344,9 +408,15 @@ async def main():
             "--model-translate and --translation-prompt are required for 'translate-llm' mode"
         )
 
-    # Create service and run tasks
+    # Create service
     service = TranscriptionService(args)
+    
+    # Handle --list-devices flag
+    if args.list_devices:
+        service.list_audio_devices()
+        return
 
+    # Run transcription tasks
     try:
         await asyncio.gather(
             service.start_transcription(),
