@@ -1,14 +1,3 @@
-# /// script
-# requires-python = ">=3.12"
-# dependencies = [
-#     "faster-whisper",
-#     "numpy",
-#     "llm",
-#     "llm-ollama",
-#     "playwright",
-#     "pyaudio",
-# ]
-# ///
 import asyncio
 import argparse
 import datetime
@@ -49,6 +38,13 @@ class TranscriptionService:
         self.temp_dir = tempfile.gettempdir()
         # Add timestamp tracking for delay calculation
         self.segment_timestamps = {}
+        # Load initial prompt if file exists
+        self.initial_prompt = None
+        try:
+            with open("transcribe_prompt.txt", "r") as f:
+                self.initial_prompt = f.read().strip()
+        except FileNotFoundError:
+            pass
 
         # Set up signal handling for graceful exit
         signal.signal(signal.SIGINT, self.handle_exit)
@@ -122,6 +118,7 @@ class TranscriptionService:
                     language=self.args.lang,
                     task=task,
                     beam_size=5,
+                    initial_prompt=self.initial_prompt,
                 )
 
                 # Get transcription text

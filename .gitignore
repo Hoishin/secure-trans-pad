@@ -174,3 +174,4 @@ cython_debug/
 .pypirc
 
 *.local.*
+transcribe_prompt.txt
